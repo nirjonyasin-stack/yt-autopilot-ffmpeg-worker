@@ -28,7 +28,7 @@ async function main(){
  let audioPath=audioAsset?path.join(workDir,"voice.mp3"):null;
  if(audioPath) await download(audioAsset.storage_path,audioPath);
  else {
-  const narration=storyScenes.map(s=>String(s.narration||"").trim()).filter(Boolean).join("\\n\\n")||String(job.narration_text||job.script||"").trim();
+  const narration=storyScenes.map(s=>String(s.narration||"").trim()).filter(Boolean).join("\n\n")||String(job.narration_text||job.script||"").trim();
   if(narration){
    const textPath=path.join(workDir,"narration.txt");
    audioPath=path.join(workDir,"kokoro-voice.wav");
@@ -54,8 +54,9 @@ async function main(){
  for(let i=0;i<scenes.length;i++){
   const d=per[i]*scale;
   if(imageFiles[i]){inputs.push("-loop","1","-t",String(d),"-i",imageFiles[i]);filters.push("["+inputIndex+":v]scale="+width+":"+height+":force_original_aspect_ratio=increase,crop="+width+":"+height+",zoompan=z='min(zoom+0.0008,1.08)':d="+Math.ceil(d*30)+":s="+width+"x"+height+":fps=30,setsar=1,format=yuv420p[v"+i+"]");}
-  else {const bg=["0x15243b","0x1b2942","0x202b45","0x162f43"][i%4];inputs.push("-f","lavfi","-t",String(d),"-i","color=c="+bg+":s="+width+"x"+height+":r=30");const idx=inputIndex;inputIndex++;const caption=esc(scenes[i].visual_description||scenes[i].on_screen_text||job.title);filters.push("["+idx+":v]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='"+caption+"':fontcolor=white:fontsize="+Math.round(width*.055)+":x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.25:boxborderw=24,format=yuv420p[v"+i+"]");}
+  else {const bg=["0x15243b","0x1b2942","0x202b45","0x162f43"][i%4];inputs.push("-f","lavfi","-t",String(d),"-i","color=c="+bg+":s="+width+"x"+height+":r=30");const idx=inputIndex;const caption=esc(scenes[i].visual_description||scenes[i].on_screen_text||job.title);filters.push("["+idx+":v]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='"+caption+"':fontcolor=white:fontsize="+Math.round(width*.055)+":x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.25:boxborderw=24,format=yuv420p[v"+i+"]");}
   concat.push("[v"+i+"]");
+  inputIndex++;
  }
  const audioIndex=inputIndex;
  if(audioPath)inputs.push("-i",audioPath);
