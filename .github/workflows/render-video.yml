@@ -1,0 +1,40 @@
+name: Render video
+on:
+  workflow_dispatch:
+    inputs:
+      job_id:
+        description: Supabase video_jobs row ID
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-${{ inputs.job_id }}
+  cancel-in-progress: false
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out worker
+        uses: actions/checkout@v4
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version
+      - name: Install dependencies
+        run: npm install --omit=dev
+      - name: Render MP4
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          VIDEO_JOB_ID: ${{ inputs.job_id }}
+        run: npm run render
