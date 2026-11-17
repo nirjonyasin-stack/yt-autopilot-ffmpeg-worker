@@ -25,7 +25,22 @@ async function main(){
  const audioAsset=(assets||[]).find(a=>a.asset_type==="audio"&&a.storage_path&&a.metadata?.role!=="background_music")||(assets||[]).find(a=>a.asset_type==="audio"&&a.storage_path);
  const imageFiles=[];
  for(let i=0;i<imageAssets.length;i++){const f=path.join(workDir,"image-"+i+".jpg");await download(imageAssets[i].storage_path,f);imageFiles.push(f);}
- const audioPath=audioAsset?path.join(workDir,"voice.mp3"):null;if(audioPath)await download(audioAsset.storage_path,audioPath);
+ let audioPath=audioAsset?path.join(workDir,"voice.mp3"):null;
+ if(audioPath) await download(audioAsset.storage_path,audioPath);
+ else {
+  const narration=storyScenes.map(s=>String(s.narration||"").trim()).filter(Boolean).join("\\n\\n")||String(job.narration_text||job.script||"").trim();
+  if(narration){
+   const textPath=path.join(workDir,"narration.txt");
+   audioPath=path.join(workDir,"kokoro-voice.wav");
+   await writeFile(textPath,narration,"utf8");
+   await run("python",["src/kokoro_tts.py",textPath,audioPath,path.join(os.homedir(),".cache/kokoro/kokoro-v1.0.onnx"),path.join(os.homedir(),".cache/kokoro/voices-v1.0.bin")]);
+   const voiceStoragePath="voiceovers/"+job.owner_id+"/"+jobId+"/kokoro-voice.wav";
+   const {error:voiceUploadError}=await supabase.storage.from(bucket).upload(voiceStoragePath,await readFile(audioPath),{contentType:"audio/wav",upsert:true});
+   if(voiceUploadError)throw voiceUploadError;
+   const {error:voiceAssetError}=await supabase.from("video_assets").insert([{owner_id:job.owner_id,job_id:jobId,asset_type:"audio",storage_path:voiceStoragePath,metadata:{role:"voiceover",provider:"kokoro-onnx",voice:"af_sarah"}}]);
+   if(voiceAssetError)throw voiceAssetError;
+  }
+ }
  const width=job.format==="short"?1080:1920,height=job.format==="short"?1920:1080;
  const defaultDuration=job.format==="short"?45:180;
  const scenes=storyScenes.length?storyScenes:(imageFiles.length?imageFiles.map((_,i)=>({duration_seconds:5,visual_description:"Scene "+(i+1),on_screen_text:"",narration:""})):[{duration_seconds:defaultDuration,visual_description:job.title,on_screen_text:job.title,narration:job.narration_text||job.script||""}]);
