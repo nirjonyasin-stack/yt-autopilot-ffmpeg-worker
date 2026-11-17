@@ -13,7 +13,7 @@ if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY || !jobI
 const run=(cmd,args)=>new Promise((resolve,reject)=>{const p=spawn(cmd,args,{stdio:["ignore","inherit","inherit"]});p.on("error",reject);p.on("close",c=>c===0?resolve():reject(new Error(cmd+" exited "+c)))});
 const esc=(s)=>String(s??"").replace(/\\/g,"\\\\").replace(/:/g,"\\:").replace(/'/g,"\\'").replace(/%/g,"\\%").replace(/,/g,"\\,").replace(/\[/g,"\\[").replace(/\]/g,"\\]").replace(/;/g,"\\;");
 async function updateJob(patch){const {error}=await supabase.from("video_jobs").update(patch).eq("id",jobId);if(error)throw error;}
-async function download(storagePath,dest){storagePath=String(storagePath).replace(/^video-audio\\//,"");const {data,error}=await supabase.storage.from(bucket).createSignedUrl(storagePath,900);if(error)throw error;const r=await fetch(data.signedUrl);if(!r.ok)throw new Error("Download failed "+r.status+" for "+storagePath);await writeFile(dest,new Uint8Array(await r.arrayBuffer()));}
+async function download(storagePath,dest){storagePath=String(storagePath).replace(/^video-audio\//,"");const {data,error}=await supabase.storage.from(bucket).createSignedUrl(storagePath,900);if(error)throw error;const r=await fetch(data.signedUrl);if(!r.ok)throw new Error("Download failed "+r.status+" for "+storagePath);await writeFile(dest,new Uint8Array(await r.arrayBuffer()));}
 function srtTime(t){const ms=Math.max(0,Math.round(t*1000)),h=Math.floor(ms/3600000),m=Math.floor(ms%3600000/60000),s=Math.floor(ms%60000/1000),z=ms%1000;return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0")+":"+String(s).padStart(2,"0")+","+String(z).padStart(3,"0");}
 async function main(){
  await mkdir(workDir,{recursive:true});
