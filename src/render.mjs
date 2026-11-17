@@ -42,7 +42,7 @@ async function main(){
   else {const bg=["0x15243b","0x1b2942","0x202b45","0x162f43"][i%4];inputs.push("-f","lavfi","-t",String(d),"-i","color=c="+bg+":s="+width+"x"+height+":r=30");const idx=inputIndex;inputIndex++;const caption=esc(scenes[i].visual_description||scenes[i].on_screen_text||job.title);filters.push("["+idx+":v]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='"+caption+"':fontcolor=white:fontsize="+Math.round(width*.055)+":x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.25:boxborderw=24,format=yuv420p[v"+i+"]");}
   concat.push("[v"+i+"]");
  }
- const audioIndex=scenes.length;
+ const audioIndex=inputIndex;
  if(audioPath)inputs.push("-i",audioPath);
  const output=path.join(workDir,"render.mp4");
  const filter=filters.join(";")+ ";" + concat.join("")+"concat=n="+scenes.length+":v=1:a=0,subtitles='"+srtPath.replace(/\\/g,"/")+"':force_style='FontName=DejaVu Sans,FontSize="+(job.format==="short"?22:30)+",Outline=2,Shadow=1,Alignment=2,MarginV=80'[vout]";
