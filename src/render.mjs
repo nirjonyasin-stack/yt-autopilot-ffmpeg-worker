@@ -13,7 +13,7 @@ if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY || !jobI
 const run=(cmd,args)=>new Promise((resolve,reject)=>{const p=spawn(cmd,args,{stdio:["ignore","inherit","inherit"]});p.on("error",reject);p.on("close",c=>c===0?resolve():reject(new Error(cmd+" exited "+c)))});
 const esc=(s)=>String(s??"").replace(/\\/g,"\\\\").replace(/:/g,"\\:").replace(/'/g,"\\'").replace(/%/g,"\\%").replace(/,/g,"\\,").replace(/\[/g,"\\[").replace(/\]/g,"\\]").replace(/;/g,"\\;");
 async function updateJob(patch){const {error}=await supabase.from("video_jobs").update(patch).eq("id",jobId);if(error)throw error;}
-async function download(storagePath,dest){const {data,error}=await supabase.storage.from(bucket).createSignedUrl(storagePath,900);if(error)throw error;const r=await fetch(data.signedUrl);if(!r.ok)throw new Error("Download failed "+r.status+" for "+storagePath);await writeFile(dest,new Uint8Array(await r.arrayBuffer()));}
+async function download(storagePath,dest){storagePath=String(storagePath).replace(/^video-audio\\//,"");const {data,error}=await supabase.storage.from(bucket).createSignedUrl(storagePath,900);if(error)throw error;const r=await fetch(data.signedUrl);if(!r.ok)throw new Error("Download failed "+r.status+" for "+storagePath);await writeFile(dest,new Uint8Array(await r.arrayBuffer()));}
 function srtTime(t){const ms=Math.max(0,Math.round(t*1000)),h=Math.floor(ms/3600000),m=Math.floor(ms%3600000/60000),s=Math.floor(ms%60000/1000),z=ms%1000;return String(h).padStart(2,"0")+":"+String(m).padStart(2,"0")+":"+String(s).padStart(2,"0")+","+String(z).padStart(3,"0");}
 async function main(){
  await mkdir(workDir,{recursive:true});
@@ -35,11 +35,11 @@ async function main(){
  let cursor=0,subIndex=1,srt="";
  for(let i=0;i<scenes.length;i++){const d=per[i]*scale,txt=String(scenes[i].narration||scenes[i].on_screen_text||"").trim();if(txt){srt+=subIndex+++"\n"+srtTime(cursor)+" --> "+srtTime(cursor+d)+"\n"+txt+"\n\n";}cursor+=d;}
  const srtPath=path.join(workDir,"captions.srt");await writeFile(srtPath,srt||"1\n00:00:00,000 --> 00:00:04,000\n"+String(job.title||"").replace(/\n/g," ")+"\n");
- const inputs=["-y"],filters=[],concat=[];
+ const inputs=["-y"],filters=[],concat=[];let inputIndex=0;
  for(let i=0;i<scenes.length;i++){
   const d=per[i]*scale;
-  if(imageFiles[i]){inputs.push("-loop","1","-t",String(d),"-i",imageFiles[i]);filters.push("["+i+":v]scale="+width+":"+height+":force_original_aspect_ratio=increase,crop="+width+":"+height+",zoompan=z='min(zoom+0.0008,1.08)':d="+Math.ceil(d*30)+":s="+width+"x"+height+":fps=30,setsar=1,format=yuv420p[v"+i+"]");}
-  else {const bg=["0x15243b","0x1b2942","0x202b45","0x162f43"][i%4];inputs.push("-f","lavfi","-t",String(d),"-i","color=c="+bg+":s="+width+"x"+height+":r=30");const idx=inputs.filter((v,j)=>v==="-i").length-1;const caption=esc(scenes[i].visual_description||scenes[i].on_screen_text||job.title);filters.push("["+idx+":v]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='"+caption+"':fontcolor=white:fontsize="+Math.round(width*.055)+":x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.25:boxborderw=24,format=yuv420p[v"+i+"]");}
+  if(imageFiles[i]){inputs.push("-loop","1","-t",String(d),"-i",imageFiles[i]);filters.push("["+inputIndex+":v]scale="+width+":"+height+":force_original_aspect_ratio=increase,crop="+width+":"+height+",zoompan=z='min(zoom+0.0008,1.08)':d="+Math.ceil(d*30)+":s="+width+"x"+height+":fps=30,setsar=1,format=yuv420p[v"+i+"]");}
+  else {const bg=["0x15243b","0x1b2942","0x202b45","0x162f43"][i%4];inputs.push("-f","lavfi","-t",String(d),"-i","color=c="+bg+":s="+width+"x"+height+":r=30");const idx=inputIndex;inputIndex++;const caption=esc(scenes[i].visual_description||scenes[i].on_screen_text||job.title);filters.push("["+idx+":v]drawtext=fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf:text='"+caption+"':fontcolor=white:fontsize="+Math.round(width*.055)+":x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.25:boxborderw=24,format=yuv420p[v"+i+"]");}
   concat.push("[v"+i+"]");
  }
  const audioIndex=scenes.length;
