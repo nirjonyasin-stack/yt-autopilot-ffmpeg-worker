@@ -28,8 +28,9 @@ jobs:
       - name: Install FFmpeg
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg fonts-dejavu-core
+          sudo apt-get install -y ffmpeg fonts-dejavu-core blender
           ffmpeg -version
+          blender --version
       - name: Install dependencies
         run: npm install --omit=dev
       - name: Set up Python for Kokoro TTS
