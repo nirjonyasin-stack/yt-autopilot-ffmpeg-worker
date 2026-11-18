@@ -17,32 +17,40 @@ async function main(){
  await updateJob({status:"rendering",error_message:null});
  const {data:assets,error:ae}=await supabase.from("video_assets").select("*").eq("job_id",jobId);if(ae)throw ae;
  const meta=job.provider_metadata||{},story=meta.storyboard||{},storyScenes=Array.isArray(story.scenes)?story.scenes:[];
- const audioAsset=(assets||[]).find(a=>a.asset_type==="audio"&&a.storage_path&&a.metadata?.role!=="background_music")||(assets||[]).find(a=>a.asset_type==="audio"&&a.storage_path);
- let audioPath=audioAsset?path.join(workDir,"voice-audio"):null;
- if(audioPath)await download(audioAsset.storage_path,audioPath);
+ const voiceAsset=(assets||[]).find(a=>a.asset_type==="audio"&&a.storage_path&&a.metadata?.role==="voiceover")||(assets||[]).find(a=>a.asset_type==="audio"&&a.storage_path&&a.metadata?.role!=="background_music"&&a.metadata?.role!=="music");
+ const musicAsset=(assets||[]).find(a=>a.asset_type==="audio"&&a.storage_path&&(a.metadata?.role==="background_music"||a.metadata?.role==="music"));
+ let voicePath=null,musicPath=null;
+ if(voiceAsset){voicePath=path.join(workDir,"voice-audio");await download(voiceAsset.storage_path,voicePath);}
  else{
   const narration=storyScenes.map(s=>String(s.narration||"").trim()).filter(Boolean).join("\n\n")||String(job.narration_text||job.script||"").trim();
   if(narration){
-   const textPath=path.join(workDir,"narration.txt");audioPath=path.join(workDir,"kokoro-voice.wav");await writeFile(textPath,narration,"utf8");
-   await run("python",[ "src/kokoro_tts.py",textPath,audioPath,path.join(os.homedir(),".cache/kokoro/kokoro-v1.0.onnx"),path.join(os.homedir(),".cache/kokoro/voices-v1.0.bin") ]);
-   const voicePath="voiceovers/"+job.owner_id+"/"+jobId+"/kokoro-voice.wav";
-   const {error:ue}=await supabase.storage.from(bucket).upload(voicePath,await readFile(audioPath),{contentType:"audio/wav",upsert:true});if(ue)throw ue;
-   const {error:ie}=await supabase.from("video_assets").insert([{owner_id:job.owner_id,job_id:jobId,asset_type:"audio",storage_path:voicePath,metadata:{role:"voiceover",provider:"kokoro-onnx",voice:"af_sarah"}}]);if(ie)throw ie;
+   const textPath=path.join(workDir,"narration.txt");voicePath=path.join(workDir,"kokoro-voice.wav");await writeFile(textPath,narration,"utf8");
+   await run("python",["src/kokoro_tts.py",textPath,voicePath,path.join(os.homedir(),".cache/kokoro/kokoro-v1.0.onnx"),path.join(os.homedir(),".cache/kokoro/voices-v1.0.bin")]);
+   const voiceStorage="voiceovers/"+job.owner_id+"/"+jobId+"/kokoro-voice.wav";
+   const {error:ue}=await supabase.storage.from(bucket).upload(voiceStorage,await readFile(voicePath),{contentType:"audio/wav",upsert:true});if(ue)throw ue;
+   const {error:ie}=await supabase.from("video_assets").insert([{owner_id:job.owner_id,job_id:jobId,asset_type:"audio",storage_path:voiceStorage,metadata:{role:"voiceover",provider:"kokoro-onnx",voice:"af_sarah"}}]);if(ie)throw ie;
   }
  }
+ if(musicAsset){musicPath=path.join(workDir,"background-music");await download(musicAsset.storage_path,musicPath);}
  const width=job.format==="short"?540:960,height=job.format==="short"?960:540,fps=24;
  const scenes=storyScenes.length?storyScenes:[{duration_seconds:job.format==="short"?45:120,visual_description:job.title,on_screen_text:job.title,narration:job.narration_text||job.script||""}];
- const sceneData=scenes.map((s,i)=>({duration_seconds:Math.max(3,Number(s.duration_seconds||6)),visual_description:String(s.visual_description||s.on_screen_text||("Colorful 3D scene "+(i+1))),on_screen_text:String(s.on_screen_text||s.visual_description||""),narration:String(s.narration||"")}));
+ const sceneData=scenes.map((s,i)=>({duration_seconds:Math.max(3,Number(s.duration_seconds||6)),visual_description:String(s.visual_description||s.on_screen_text||("Colorful 3D scene "+(i+1))),on_screen_text:String(s.on_screen_text||s.title||("Scene "+(i+1))),narration:String(s.narration||"")}));
  let cursor=0,captionIndex=1,srt="";
- for(const s of sceneData){const d=s.duration_seconds,txt=(s.narration||s.on_screen_text).trim();if(txt)srt+=captionIndex+++"\n"+srtTime(cursor)+" --> "+srtTime(cursor+d)+"\n"+txt+"\n\n";cursor+=d;}
+ for(const s of sceneData){const d=s.duration_seconds,txt=(s.narration||s.on_screen_text).trim();if(txt)srt+=captionIndex+"\n"+srtTime(cursor)+" --> "+srtTime(cursor+d)+"\n"+txt+"\n\n",captionIndex++;cursor+=d;}
  const srtPath=path.join(workDir,"captions.srt");await writeFile(srtPath,srt||"1\n00:00:00,000 --> 00:00:04,000\n"+String(job.title||"").replace(/\n/g," ")+"\n","utf8");
  const specPath=path.join(workDir,"story.json"),raw3d=path.join(workDir,"animation.mp4"),output=path.join(workDir,"render.mp4");
  await writeFile(specPath,JSON.stringify({title:job.title,width,height,fps,scenes:sceneData}),"utf8");
  await run("blender",["-b","-t","2","-P","src/blender_scene.py","--",specPath,raw3d]);
  const subFilter="subtitles='"+srtPath.replace(/\\/g,"/").replace(/:/g,"\\:")+"':force_style='FontName=DejaVu Sans,FontSize="+(job.format==="short"?18:24)+",Outline=2,Shadow=1,Alignment=2,MarginV=42'";
- const args=["-y","-i",raw3d,"-vf",subFilter];
- if(audioPath)args.push("-i",audioPath,"-map","0:v:0","-map","1:a:0","-shortest","-c:a","aac","-b:a","160k");
+ const args=["-y","-i",raw3d];
+ if(voicePath)args.push("-i",voicePath);
+ if(musicPath)args.push("-stream_loop","-1","-i",musicPath);
+ args.push("-vf",subFilter,"-map","0:v:0");
+ if(voicePath&&musicPath)args.push("-filter_complex","[1:a]volume=1.0[voice];[2:a]volume=0.16[music];[voice][music]amix=inputs=2:duration=first:dropout_transition=2[aout]","-map","[aout]");
+ else if(voicePath)args.push("-map","1:a:0");
+ else if(musicPath)args.push("-map","1:a:0","-af","volume=0.2");
  else args.push("-an");
+ if(voicePath||musicPath)args.push("-shortest","-c:a","aac","-b:a","160k");
  args.push("-c:v","libx264","-preset","veryfast","-crf","23","-pix_fmt","yuv420p","-movflags","+faststart",output);
  await run("ffmpeg",args);
  const videoPath="renders/"+job.owner_id+"/"+jobId+".mp4";
